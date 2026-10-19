@@ -5,4 +5,4 @@
 # Xcode-related
 **/dgph
 **/xcuserdata/
-/android/.kotlin/
+**/android/.kotlin/
