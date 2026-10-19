@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -21,6 +22,32 @@ Future<void> main() async {
 // ============================================================
 // MODELS + FIRESTORE DATA HELPERS
 // ============================================================
+
+// Coordinates for the supported Chennai hospital suggestions.
+// These are map pins for the listed hospital locations, not device GPS.
+// For any other hospital, configure its real latitude/longitude in the Hospital
+// role profile rather than substituting the phone's current location.
+LatLng? coordinatesForHospital(String name) {
+  final key = name.trim().toLowerCase();
+  const entries = <String, LatLng>{
+    'apollo hospital': LatLng(13.0067, 80.2206),
+    'apollo hospitals greams road': LatLng(13.0634, 80.2518),
+    'apollo first med hospitals': LatLng(13.0845, 80.2101),
+    'billroth hospital': LatLng(13.0835, 80.2215),
+    'billroth hospitals shenoy nagar': LatLng(13.0783, 80.2255),
+    'fortis malar hospital': LatLng(13.0068, 80.2550),
+    'government general hospital': LatLng(13.0830, 80.2785),
+    'government kilpauk medical college hospital': LatLng(13.0788, 80.2420),
+    'miot international': LatLng(13.0317, 80.1748),
+    'rajiv gandhi government general hospital': LatLng(13.0830, 80.2785),
+    'sims hospital': LatLng(13.0520, 80.2120),
+    'sri ramachandra medical centre': LatLng(13.0387, 80.1406),
+    'srm general hospital': LatLng(12.8230, 80.0444),
+    'stanley medical college hospital': LatLng(13.1050, 80.2870),
+    'vijaya hospital': LatLng(13.0525, 80.2090),
+  };
+  return entries[key];
+}
 
 class BloodRequest {
   String? id;
@@ -60,7 +87,15 @@ class BloodRequest {
     final created = data['createdAt'];
     return BloodRequest(
       id: doc.id,
-      patientName: data['patientName']?.toString() ?? 'Patient',
+      patientName: (() {
+        final candidates = [data['patientName'], data['patient'], data['name']];
+        for (final candidate in candidates) {
+          final value = candidate?.toString().trim() ?? '';
+          if (value.isNotEmpty && value.toLowerCase() != 'patient')
+            return value;
+        }
+        return 'Patient name unavailable';
+      })(),
       bloodGroup: data['bloodGroup']?.toString() ?? 'O+',
       units: (data['units'] as num?)?.toInt() ?? 1,
       hospital: data['hospital']?.toString() ?? '',
@@ -519,6 +554,128 @@ const List<Map<String, dynamic>> demoDonorData = [
   },
 ];
 
+// Sample donor profiles for app demonstration/testing only. Names and generated
+// locations are illustrative, not verified registered donors. Do not use these
+// sample profiles for real-world blood requests.
+List<Map<String, dynamic>> buildNearbyDemoDonorData({
+  required double? originLatitude,
+  required double? originLongitude,
+  required String requestedArea,
+}) {
+  final baseLat = originLatitude ?? 13.0827; // Chennai fallback for demo mode.
+  final baseLon = originLongitude ?? 80.2707;
+  final area =
+      requestedArea.trim().isNotEmpty &&
+          requestedArea.trim().toLowerCase() != 'all areas'
+      ? requestedArea.trim()
+      : 'Nearby Area';
+  const names = [
+    'Arjun Kumar',
+    'Meena R',
+    'Karthik S',
+    'Priya M',
+    'Vignesh K',
+    'Divya R',
+    'Sanjay P',
+    'Kavitha S',
+    'Rahul N',
+    'Nithya V',
+    'Praveen M',
+    'Anitha K',
+    'Suresh R',
+    'Deepa P',
+    'Hari S',
+    'Keerthana M',
+    'Dinesh K',
+    'Lavanya R',
+    'Manoj V',
+    'Swetha N',
+    'Ashwin P',
+    'Revathi S',
+    'Gokul R',
+    'Janani K',
+    'Bala M',
+    'Monisha V',
+    'Surya K',
+    'Ramya S',
+    'Naveen R',
+    'Aishwarya P',
+    'Madhan S',
+    'Sandhya K',
+    'Vijay M',
+    'Harini R',
+    'Sathish P',
+    'Abinaya S',
+    'Ramesh K',
+    'Pavithra M',
+    'Ajay R',
+    'Sangeetha V',
+    'Prakash S',
+    'Indhu K',
+    'Kiran M',
+    'Yamuna R',
+    'Dhanush P',
+    'Shalini S',
+    'Bharath K',
+    'Nandhini M',
+    'Mohan R',
+    'Kowsalya P',
+    'Rohit S',
+    'Thenmozhi K',
+    'Nithish M',
+    'Uma R',
+    'Saravanan P',
+    'Mahalakshmi S',
+    'Vasanth K',
+    'Dharani M',
+    'Lokesh R',
+    'Abirami P',
+    'Siva S',
+    'Preethi K',
+    'Elango M',
+    'Gayathri R',
+    'Kishore P',
+    'Bhavani S',
+    'Aravind K',
+    'Malathi M',
+    'Ranjith R',
+    'Sowmya P',
+    'Muralidhar S',
+    'Akila K',
+  ];
+  const groups = ['O+', 'A+', 'B+', 'O-', 'AB+', 'A-', 'B-', 'AB-'];
+  final result = <Map<String, dynamic>>[];
+  final latitudeScale = 111.0;
+  final longitudeScale =
+      111.0 * (math.cos(baseLat * math.pi / 180).abs().clamp(0.1, 1.0));
+
+  for (var i = 0; i < names.length; i++) {
+    // 24 within 5 km, 24 between 5 and 10 km, and 24 between 10 and 25 km.
+    final double distanceKm;
+    if (i < 24) {
+      distanceKm = 0.4 + (i * 0.18); // 0.4–4.54 km
+    } else if (i < 48) {
+      distanceKm = 5.2 + ((i - 24) * 0.19); // 5.2–9.57 km
+    } else {
+      distanceKm = 10.5 + ((i - 48) * 0.58); // 10.5–23.84 km
+    }
+    final angle = i * 137.5 * math.pi / 180;
+    final northKm = distanceKm * math.cos(angle);
+    final eastKm = distanceKm * math.sin(angle);
+    result.add({
+      'id': 'demo_nearby_${i + 1}',
+      'name': names[i],
+      'bloodGroup': groups[i % groups.length],
+      'donationCount': 3 + ((i * 7) % 15),
+      'available': true,
+      'city': area,
+      'latitude': baseLat + northKm / latitudeScale,
+      'longitude': baseLon + eastKm / longitudeScale,
+    });
+  }
+  return result;
+}
+
 Donor _demoDonor(Map<String, dynamic> d) {
   return Donor(
     id: d['id']?.toString(),
@@ -581,6 +738,24 @@ Future<Map<String, dynamic>> getRoleProfile(String role) async {
   return {};
 }
 
+bool _areaMatches(String donorArea, String requestedArea) {
+  final donor = donorArea.trim().toLowerCase();
+  final requested = requestedArea.trim().toLowerCase();
+  if (requested.isEmpty || requested == 'all areas') return true;
+  if (donor.isEmpty) return false;
+
+  // Match normalized area names without requiring an exact whole-address match.
+  final normalize = (String value) => value
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\\s+'), ' ');
+  final normalizedDonor = normalize(donor);
+  final normalizedRequested = normalize(requested);
+  return normalizedDonor == normalizedRequested ||
+      normalizedDonor.contains(normalizedRequested) ||
+      normalizedRequested.contains(normalizedDonor);
+}
+
 Future<List<Donor>> fetchPriorityDonors({
   required String bloodGroup,
   String city = '',
@@ -598,22 +773,53 @@ Future<List<Donor>> fetchPriorityDonors({
   for (final doc in snapshot.docs) {
     if (user != null && doc.id == user.uid) continue;
 
-    final rawProfiles = doc.data()['roleProfiles'];
-    final rawDonor = rawProfiles is Map ? rawProfiles['Donor'] : null;
-    if (rawDonor is! Map) continue;
+    final userData = doc.data();
+    final rawProfiles = userData['roleProfiles'];
+    // Older accounts may store the role key in lowercase. Accept both forms.
+    final rawDonor = rawProfiles is Map
+        ? (rawProfiles['Donor'] ?? rawProfiles['donor'])
+        : null;
+    // Also support accounts whose donor fields are stored at the user-document
+    // level instead of inside roleProfiles.
+    final profileSource = rawDonor is Map
+        ? rawDonor
+        : ((userData['role']?.toString().toLowerCase() == 'donor' ||
+                  userData['activeRole']?.toString().toLowerCase() == 'donor')
+              ? userData
+              : null);
+    if (profileSource is! Map) continue;
 
-    final profile = Map<String, dynamic>.from(rawDonor);
+    final profile = Map<String, dynamic>.from(profileSource);
     final donor = Donor.fromRoleProfile(doc, profile);
+    // Profiles created by older app versions may save the selected area under
+    // city, area, locality, neighbourhood, or address. Normalize all variants.
     final donorGroup = donor.bloodGroup.trim().toUpperCase();
-    final donorCity = profile['city']?.toString().trim().toLowerCase() ?? '';
+    final donorCity =
+        [
+              profile['city'],
+              profile['area'],
+              profile['locality'],
+              profile['neighbourhood'],
+              profile['neighborhood'],
+              profile['address'],
+              userData['city'],
+              userData['area'],
+              userData['locality'],
+              userData['address'],
+            ]
+            .where((value) => value != null)
+            .map((value) => value.toString().trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .join(' | ');
 
     if (!donor.available) continue;
-    if (!canDonorDonateTo(donorGroup, targetGroup)) continue;
+    if (targetGroup != 'ALL' && !canDonorDonateTo(donorGroup, targetGroup))
+      continue;
 
     // Area is a hard filter when an area is selected.
     if (requestedArea.isNotEmpty &&
         requestedArea != 'all areas' &&
-        !donorCity.contains(requestedArea)) {
+        !_areaMatches(donorCity, requestedArea)) {
       continue;
     }
 
@@ -632,7 +838,11 @@ Future<List<Donor>> fetchPriorityDonors({
   final currentDonorName =
       currentProfile['name']?.toString().trim().toLowerCase() ?? '';
 
-  for (final data in demoDonorData) {
+  for (final data in buildNearbyDemoDonorData(
+    originLatitude: originLatitude,
+    originLongitude: originLongitude,
+    requestedArea: requestedArea,
+  )) {
     final donor = _demoDonor(data);
     if (user != null && donor.id == user.uid) continue;
     if (currentDonorName.isNotEmpty &&
@@ -640,14 +850,15 @@ Future<List<Donor>> fetchPriorityDonors({
       continue;
     }
     if (!donor.available) continue;
-    if (!canDonorDonateTo(donor.bloodGroup.trim().toUpperCase(), targetGroup)) {
+    if (targetGroup != 'ALL' &&
+        !canDonorDonateTo(donor.bloodGroup.trim().toUpperCase(), targetGroup)) {
       continue;
     }
 
     final donorCity = data['city']?.toString().trim().toLowerCase() ?? '';
     if (requestedArea.isNotEmpty &&
         requestedArea != 'all areas' &&
-        !donorCity.contains(requestedArea)) {
+        !_areaMatches(donorCity, requestedArea)) {
       continue;
     }
 
@@ -660,20 +871,28 @@ Future<List<Donor>> fetchPriorityDonors({
   }
 
   donors.sort((a, b) {
-    final da = donorDistanceKm(a, originLatitude, originLongitude);
-    final db = donorDistanceKm(b, originLatitude, originLongitude);
-    final distanceCompare = da.compareTo(db);
-    if (distanceCompare != 0) return distanceCompare;
-
-    final aExact = a.bloodGroup.trim().toUpperCase() == targetGroup ? 1 : 0;
-    final bExact = b.bloodGroup.trim().toUpperCase() == targetGroup ? 1 : 0;
+    // Priority ranking: exact blood-group match first, then experienced donors,
+    // then the nearest donor as a tie-breaker.
+    final aExact =
+        targetGroup != 'ALL' && a.bloodGroup.trim().toUpperCase() == targetGroup
+        ? 1
+        : 0;
+    final bExact =
+        targetGroup != 'ALL' && b.bloodGroup.trim().toUpperCase() == targetGroup
+        ? 1
+        : 0;
     final exactCompare = bExact.compareTo(aExact);
     if (exactCompare != 0) return exactCompare;
 
-    return b.donationCount.compareTo(a.donationCount);
+    final donationCompare = b.donationCount.compareTo(a.donationCount);
+    if (donationCompare != 0) return donationCompare;
+
+    final da = donorDistanceKm(a, originLatitude, originLongitude);
+    final db = donorDistanceKm(b, originLatitude, originLongitude);
+    return da.compareTo(db);
   });
 
-  return donors.take(20).toList();
+  return donors;
 }
 
 Future<void> createLifeLinkNotification({
@@ -711,13 +930,22 @@ Future<void> notifyMatchingDonors({
 
     for (final doc in snapshot.docs) {
       if (doc.id == current.uid) continue;
-      final profiles = doc.data()['roleProfiles'];
+      final userData = doc.data();
+      final profiles = userData['roleProfiles'];
       final rawDonor = profiles is Map ? profiles['Donor'] : null;
-      if (rawDonor is! Map) continue;
-      final donor = Map<String, dynamic>.from(rawDonor);
+      final donor = rawDonor is Map
+          ? Map<String, dynamic>.from(rawDonor)
+          : <String, dynamic>{};
       if (donor['available'] == false) continue;
       final donorGroup =
-          donor['bloodGroup']?.toString().trim().toUpperCase() ?? '';
+          (donor['bloodGroup'] ??
+                  donor['blood_group'] ??
+                  userData['bloodGroup'] ??
+                  userData['blood_group'])
+              ?.toString()
+              .trim()
+              .toUpperCase() ??
+          '';
       if (!canDonorDonateTo(donorGroup, bloodGroup)) continue;
 
       final ref = FirebaseFirestore.instance.collection('notifications').doc();
@@ -1121,9 +1349,14 @@ class _BloodRequestsListPageState extends State<BloodRequestsListPage> {
       final donorProfile = profiles is Map ? profiles['Donor'] : null;
       if (!mounted) return;
       setState(() {
-        donorBloodGroup = donorProfile is Map
-            ? donorProfile['bloodGroup']?.toString()
+        final profileGroup = donorProfile is Map
+            ? (donorProfile['bloodGroup'] ?? donorProfile['blood_group'])
             : null;
+        final rootGroup = data['bloodGroup'] ?? data['blood_group'];
+        final resolvedGroup = (profileGroup ?? rootGroup)?.toString().trim();
+        donorBloodGroup = (resolvedGroup == null || resolvedGroup.isEmpty)
+            ? null
+            : resolvedGroup.toUpperCase();
         loadingDonorGroup = false;
       });
     } catch (_) {
@@ -1148,9 +1381,8 @@ class _BloodRequestsListPageState extends State<BloodRequestsListPage> {
       'blood_requests',
     );
 
-    if (widget.scope == 'currentUser' && user != null) {
-      query = query.where('createdBy', isEqualTo: user.uid);
-    }
+    // Listen to the collection and filter locally so older requests that only
+    // have patientId (or only createdBy) are still visible to their owner.
 
     return Scaffold(
       appBar: AppBar(title: const Text('Blood Requests')),
@@ -1174,6 +1406,16 @@ class _BloodRequestsListPageState extends State<BloodRequestsListPage> {
               .map(BloodRequest.fromDoc)
               .toList();
 
+          if (widget.scope == 'currentUser' && user != null) {
+            requests = requests
+                .where(
+                  (request) =>
+                      request.createdBy == user.uid ||
+                      request.patientId == user.uid,
+                )
+                .toList();
+          }
+
           if (widget.scope == 'compatible') {
             final group = donorBloodGroup?.trim().toUpperCase() ?? '';
             requests = requests.where((request) {
@@ -1182,7 +1424,7 @@ class _BloodRequestsListPageState extends State<BloodRequestsListPage> {
                   (request.createdBy == user.uid ||
                       request.patientId == user.uid);
               return !isOwn &&
-                  request.status.toLowerCase() == 'pending' &&
+                  request.status.trim().toLowerCase() == 'pending' &&
                   group.isNotEmpty &&
                   canDonorDonateTo(
                     group,
@@ -4685,8 +4927,7 @@ class _DonorPageState extends State<DonorPage> {
   bool isLoadingLocation = false;
   double? hospitalDistance;
 
-  static const double hospitalLatitude = 13.0827;
-  static const double hospitalLongitude = 80.2707;
+  // Distance is calculated against each request's saved coordinates, not (0, 0).
 
   @override
   void initState() {
@@ -4710,13 +4951,20 @@ class _DonorPageState extends State<DonorPage> {
           : <String, dynamic>{};
       final loadedName = donorProfile['name']?.toString().trim() ?? '';
       final loadedBloodGroup =
-          donorProfile['bloodGroup']?.toString() ?? 'Not set';
+          (donorProfile['bloodGroup'] ??
+                  donorProfile['blood_group'] ??
+                  data['bloodGroup'] ??
+                  data['blood_group'])
+              ?.toString()
+              .trim();
       if (!mounted) return;
       setState(() {
         donorName = loadedName.isNotEmpty
             ? loadedName
             : (user.email?.split('@').first ?? 'Donor');
-        donorBloodGroup = loadedBloodGroup;
+        donorBloodGroup = (loadedBloodGroup == null || loadedBloodGroup.isEmpty)
+            ? 'Not set'
+            : loadedBloodGroup.toUpperCase();
         donationCount = (donorProfile['donationCount'] as num?)?.toInt() ?? 0;
         isAvailable = donorProfile['available'] != false;
         loadingProfile = false;
@@ -4779,16 +5027,10 @@ class _DonorPageState extends State<DonorPage> {
         ),
       );
 
-      final distanceInMeters = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        hospitalLatitude,
-        hospitalLongitude,
-      );
-
       setState(() {
         currentPosition = position;
-        hospitalDistance = distanceInMeters / 1000;
+        hospitalDistance =
+            null; // Computed per request using its saved coordinates.
         isLoadingLocation = false;
       });
 
@@ -4954,9 +5196,10 @@ class _DonorPageState extends State<DonorPage> {
             ),
             const SizedBox(height: 12),
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              // Listen to the whole collection so legacy requests with status
+              // values such as 'pending' are not silently excluded by Firestore.
               stream: FirebaseFirestore.instance
                   .collection('blood_requests')
-                  .where('status', isEqualTo: 'Pending')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -4996,7 +5239,7 @@ class _DonorPageState extends State<DonorPage> {
                         return !isOwn &&
                             group.isNotEmpty &&
                             group != 'NOT SET' &&
-                            request.status.toLowerCase() == 'pending' &&
+                            request.status.trim().toLowerCase() == 'pending' &&
                             canDonorDonateTo(
                               group,
                               request.bloodGroup.trim().toUpperCase(),
@@ -5167,6 +5410,15 @@ class _DonorPageState extends State<DonorPage> {
             ],
           ),
           const SizedBox(height: 15),
+          Text(
+            'Patient: ${request.patientName}',
+            style: const TextStyle(
+              color: Color(0xFF212121),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 5),
           Text(
             request.hospital,
             style: const TextStyle(
@@ -5389,13 +5641,9 @@ class _NearbyDonorsPageState extends State<NearbyDonorsPage> {
   Future<void> _reload() async {
     setState(() => loading = true);
     try {
-      final group = selectedGroup == 'All' ? 'B+' : selectedGroup;
-
-      // If no blood group is selected, use the role's current group.
-      final roleProfile = await getRoleProfile(widget.role);
-      final effectiveGroup = selectedGroup == 'All'
-          ? (roleProfile['bloodGroup']?.toString() ?? 'B+')
-          : group;
+      // 'All' means do not filter by blood group. A specific group applies
+      // the donor-to-recipient compatibility rules in fetchPriorityDonors.
+      final effectiveGroup = selectedGroup == 'All' ? 'ALL' : selectedGroup;
 
       _loadedDonors = await fetchPriorityDonors(
         bloodGroup: effectiveGroup,
@@ -5457,7 +5705,7 @@ class _NearbyDonorsPageState extends State<NearbyDonorsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
             child: Text(
-              'Search eligible donors by blood group, city and distance. Frequent donors are ranked first.',
+              'Search donors by blood group, area and distance. Priority: exact blood-group match, donation history, then distance. Demo profiles are simulated for presentation only.',
               style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
             ),
           ),
@@ -5500,11 +5748,8 @@ class _NearbyDonorsPageState extends State<NearbyDonorsPage> {
                         FocusScope.of(context).unfocus();
                         setState(() {
                           selectedCity = area;
-                          search = area;
-                          searchController.text = area;
-                          searchController.selection = TextSelection.collapsed(
-                            offset: searchController.text.length,
-                          );
+                          search = '';
+                          searchController.clear();
                         });
                         await _reload();
                       },
@@ -5561,6 +5806,8 @@ class _NearbyDonorsPageState extends State<NearbyDonorsPage> {
                       if (value == null) return;
                       setState(() {
                         selectedCity = value == 'All Areas' ? '' : value;
+                        search = '';
+                        searchController.clear();
                       });
                       await _reload();
                     },
@@ -5933,12 +6180,60 @@ class BloodRequestPage extends StatefulWidget {
 }
 
 class _BloodRequestPageState extends State<BloodRequestPage> {
-  static const double hospitalLatitude = 13.0827;
-  static const double hospitalLongitude = 80.2707;
+  Position? _distancePosition;
+  bool _loadingDistancePosition = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _distancePosition = widget.donorPosition;
+    if (_distancePosition == null && widget.viewerRole == 'Donor') {
+      _loadDistancePosition();
+    }
+  }
+
+  Future<void> _loadDistancePosition() async {
+    if (_loadingDistancePosition) return;
+    _loadingDistancePosition = true;
+    try {
+      final position = await getDeviceLocation();
+      if (mounted && position != null) {
+        setState(() => _distancePosition = position);
+      }
+    } finally {
+      _loadingDistancePosition = false;
+    }
+  }
+
+  double? _requestDistanceKm(BloodRequest request) {
+    final position = _distancePosition ?? widget.donorPosition;
+    final lat = request.patientLatitude;
+    final lon = request.patientLongitude;
+    if (position == null || lat == null || lon == null)
+      return widget.hospitalDistance;
+    return Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          lat,
+          lon,
+        ) /
+        1000.0;
+  }
 
   Future<void> openNavigation() async {
     final request = activeBloodRequest;
     if (request == null) return;
+
+    if (request.patientLatitude == null || request.patientLongitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This request has no verified hospital coordinates. Ask the hospital to set its exact location in its profile.',
+          ),
+        ),
+      );
+      return;
+    }
 
     final current = widget.donorPosition ?? await getDeviceLocation();
     if (current == null) {
@@ -5952,7 +6247,7 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
       'https://www.google.com/maps/dir/?api=1'
       '&origin=${current.latitude},'
       '${current.longitude}'
-      '&destination=${request.patientLatitude ?? hospitalLatitude},${request.patientLongitude ?? hospitalLongitude}'
+      '&destination=${request.patientLatitude},${request.patientLongitude}'
       '&travelmode=driving',
     );
 
@@ -5993,6 +6288,19 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
         );
       }
       if (mounted) setState(() {});
+      // Start donor GPS sharing immediately after the request is accepted.
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DonorLiveLocationPage(
+              requestId: request.id!,
+              patientLatitude: request.patientLatitude ?? 0,
+              patientLongitude: request.patientLongitude ?? 0,
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -6069,10 +6377,10 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
 
   Widget buildMap() {
     final request = activeBloodRequest;
-    final hospitalLocation = LatLng(
-      request?.patientLatitude ?? hospitalLatitude,
-      request?.patientLongitude ?? hospitalLongitude,
-    );
+    final hospitalLocation =
+        request?.patientLatitude != null && request?.patientLongitude != null
+        ? LatLng(request!.patientLatitude!, request.patientLongitude!)
+        : null;
 
     final donorLocation = widget.donorPosition == null
         ? null
@@ -6087,8 +6395,13 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
         borderRadius: BorderRadius.circular(15),
         child: FlutterMap(
           options: MapOptions(
-            initialCenter: donorLocation ?? hospitalLocation,
-            initialZoom: donorLocation != null ? 12 : 14,
+            initialCenter:
+                donorLocation ??
+                hospitalLocation ??
+                const LatLng(13.0827, 80.2707),
+            initialZoom: donorLocation != null && hospitalLocation != null
+                ? 12
+                : 14,
           ),
           children: [
             TileLayer(
@@ -6097,16 +6410,17 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
             ),
             MarkerLayer(
               markers: [
-                Marker(
-                  point: hospitalLocation,
-                  width: 60,
-                  height: 60,
-                  child: Icon(
-                    Icons.local_hospital,
-                    color: AppColors.primary,
-                    size: 42,
+                if (hospitalLocation != null)
+                  Marker(
+                    point: hospitalLocation,
+                    width: 60,
+                    height: 60,
+                    child: const Icon(
+                      Icons.local_hospital,
+                      color: AppColors.primary,
+                      size: 42,
+                    ),
                   ),
-                ),
                 if (donorLocation != null)
                   Marker(
                     point: donorLocation,
@@ -6220,9 +6534,11 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
                   infoRow(
                     Icons.location_on,
                     'Distance',
-                    widget.hospitalDistance == null
-                        ? 'Location not available'
-                        : '${widget.hospitalDistance!.toStringAsFixed(2)} km',
+                    _requestDistanceKm(request) == null
+                        ? (_loadingDistancePosition
+                              ? 'Getting location…'
+                              : 'Location not available')
+                        : '${_requestDistanceKm(request)!.toStringAsFixed(2)} km',
                   ),
                   const SizedBox(height: 25),
                   const Text(
@@ -6287,17 +6603,39 @@ class _BloodRequestPageState extends State<BloodRequestPage> {
                                 builder: (_) => DonorLiveLocationPage(
                                   requestId: request.id!,
                                   patientLatitude:
-                                      request.patientLatitude ??
-                                      hospitalLatitude,
+                                      request.patientLatitude ?? 0.0,
                                   patientLongitude:
-                                      request.patientLongitude ??
-                                      hospitalLongitude,
+                                      request.patientLongitude ?? 0.0,
                                 ),
                               ),
                             );
                           },
                           icon: const Icon(Icons.my_location),
                           label: const Text('Start Live Location'),
+                        ),
+                      ),
+                    ),
+                  if (widget.viewerRole != 'Donor' && request.donorId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DonorLiveLocationPage(
+                                  requestId: request.id!,
+                                  patientLatitude: request.patientLatitude ?? 0,
+                                  patientLongitude:
+                                      request.patientLongitude ?? 0,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.my_location),
+                          label: const Text('Share My Live Location'),
                         ),
                       ),
                     ),
@@ -6372,6 +6710,10 @@ class DonorLiveLocationPage extends StatefulWidget {
 class _DonorLiveLocationPageState extends State<DonorLiveLocationPage> {
   StreamSubscription<Position>? subscription;
   Position? current;
+  String? patientId;
+  String? donorId;
+  bool starting = true;
+  String? locationError;
 
   @override
   void initState() {
@@ -6380,59 +6722,75 @@ class _DonorLiveLocationPageState extends State<DonorLiveLocationPage> {
   }
 
   Future<void> _start() async {
-    final position = await getDeviceLocation();
-    if (position == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission is required for live tracking.'),
-          ),
-        );
-      }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted)
+        setState(() {
+          starting = false;
+          locationError = 'Please sign in to share location.';
+        });
       return;
     }
-
-    await _write(position);
 
     try {
       final requestDoc = await FirebaseFirestore.instance
           .collection('blood_requests')
           .doc(widget.requestId)
           .get();
-      final requestData = requestDoc.data() ?? {};
-      final patientId =
-          requestData['patientId']?.toString() ??
-          requestData['createdBy']?.toString();
-      if (patientId != null && patientId.isNotEmpty) {
-        await createLifeLinkNotification(
-          userId: patientId,
-          requestId: widget.requestId,
-          type: 'live_tracking_started',
-          title: 'Donor started live tracking',
-          message: 'Your donor is now sharing live location.',
+      final data = requestDoc.data() ?? {};
+      patientId = (data['patientId'] ?? data['createdBy'])?.toString();
+      donorId = data['donorId']?.toString();
+
+      // Only the accepted donor or the patient/request owner may share for this request.
+      if (user.uid != patientId && user.uid != donorId) {
+        throw StateError('This account is not part of this blood request.');
+      }
+
+      final position = await getDeviceLocation();
+      if (position == null) {
+        throw StateError(
+          'Enable location services and allow LifeLink location permission.',
         );
       }
-    } catch (_) {}
+      await _write(position, user.uid);
+      subscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.bestForNavigation,
+              distanceFilter: 5,
+            ),
+          ).listen(
+            (p) => _write(p, user.uid),
+            onError: (Object e) {
+              if (mounted)
+                setState(() => locationError = 'GPS update failed: $e');
+            },
+          );
 
-    subscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 20,
-      ),
-    ).listen(_write);
+      if (mounted)
+        setState(() {
+          starting = false;
+          locationError = null;
+        });
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          starting = false;
+          locationError = e.toString().replaceFirst('Bad state: ', '');
+        });
+    }
   }
 
-  Future<void> _write(Position position) async {
+  Future<void> _write(Position position, String uid) async {
     current = position;
     if (mounted) setState(() {});
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     await FirebaseFirestore.instance
+        .collection('blood_requests')
+        .doc(widget.requestId)
         .collection('live_locations')
-        .doc(user.uid)
+        .doc(uid)
         .set({
-          'userId': user.uid,
+          'userId': uid,
           'requestId': widget.requestId,
           'latitude': position.latitude,
           'longitude': position.longitude,
@@ -6446,14 +6804,18 @@ class _DonorLiveLocationPageState extends State<DonorLiveLocationPage> {
     await subscription?.cancel();
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
-          .collection('live_locations')
-          .doc(user.uid)
-          .set({
-            'requestId': widget.requestId,
-            'active': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      try {
+        await FirebaseFirestore.instance
+            .collection('blood_requests')
+            .doc(widget.requestId)
+            .collection('live_locations')
+            .doc(user.uid)
+            .set({
+              'requestId': widget.requestId,
+              'active': false,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+      } catch (_) {}
     }
   }
 
@@ -6465,64 +6827,145 @@ class _DonorLiveLocationPageState extends State<DonorLiveLocationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final patient = LatLng(widget.patientLatitude, widget.patientLongitude);
-    final donor = current == null
-        ? null
-        : LatLng(current!.latitude, current!.longitude);
-
+    final user = FirebaseAuth.instance.currentUser;
+    final otherId = user?.uid == donorId ? patientId : donorId;
     return Scaffold(
-      appBar: AppBar(title: const Text('Live Donor Location')),
-      body: Column(
-        children: [
-          Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: donor ?? patient,
-                initialZoom: donor != null ? 13 : 14,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.lifelink',
+      appBar: AppBar(title: const Text('Live Location Sharing')),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: otherId == null
+            ? null
+            : FirebaseFirestore.instance
+                  .collection('blood_requests')
+                  .doc(widget.requestId)
+                  .collection('live_locations')
+                  .doc(otherId)
+                  .snapshots(),
+        builder: (context, snapshot) {
+          final otherData = snapshot.data?.data();
+          final otherActive =
+              otherData?['active'] == true &&
+              otherData?['requestId']?.toString() == widget.requestId;
+          final otherLat = otherActive
+              ? (otherData?['latitude'] as num?)?.toDouble()
+              : null;
+          final otherLon = otherActive
+              ? (otherData?['longitude'] as num?)?.toDouble()
+              : null;
+          final other = otherLat == null || otherLon == null
+              ? null
+              : LatLng(otherLat, otherLon);
+          final own = current == null
+              ? null
+              : LatLng(current!.latitude, current!.longitude);
+          final hospital =
+              widget.patientLatitude != 0 && widget.patientLongitude != 0
+              ? LatLng(widget.patientLatitude, widget.patientLongitude)
+              : null;
+          final center =
+              own ?? other ?? hospital ?? const LatLng(13.0827, 80.2707);
+          final markers = <Marker>[
+            if (hospital != null)
+              Marker(
+                point: hospital,
+                width: 70,
+                height: 70,
+                child: const Icon(
+                  Icons.local_hospital,
+                  color: Colors.deepOrange,
+                  size: 46,
                 ),
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: patient,
-                      width: 60,
-                      height: 60,
-                      child: const Icon(
-                        Icons.local_hospital,
-                        color: AppColors.primary,
-                        size: 42,
-                      ),
+              ),
+            if (own != null)
+              Marker(
+                point: own,
+                width: 70,
+                height: 70,
+                child: const Icon(
+                  Icons.my_location,
+                  color: Colors.blue,
+                  size: 44,
+                ),
+              ),
+            if (other != null)
+              Marker(
+                point: other,
+                width: 70,
+                height: 70,
+                child: const Icon(
+                  Icons.location_pin,
+                  color: AppColors.primary,
+                  size: 48,
+                ),
+              ),
+          ];
+          return Column(
+            children: [
+              Expanded(
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 13,
+                    keepAlive: true,
+                    backgroundColor: const Color(0xFFE8EEF2),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.lifelink.ai',
+                      maxZoom: 19,
+                      errorTileCallback: (tile, error, stackTrace) {
+                        debugPrint('OpenStreetMap tile error: $error');
+                      },
                     ),
-                    if (donor != null)
-                      Marker(
-                        point: donor,
-                        width: 60,
-                        height: 60,
-                        child: const Icon(
-                          Icons.person_pin_circle,
-                          color: Colors.blue,
-                          size: 44,
+                    MarkerLayer(markers: markers),
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution(
+                          '© OpenStreetMap contributors',
+                          onTap: () => launchUrl(
+                            Uri.parse(
+                              'https://www.openstreetmap.org/copyright',
+                            ),
+                            mode: LaunchMode.externalApplication,
+                          ),
                         ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      starting
+                          ? 'Getting your GPS location…'
+                          : current == null
+                          ? (locationError ??
+                                'Your live location is not available.')
+                          : 'Your GPS: ${current!.latitude.toStringAsFixed(6)}, ${current!.longitude.toStringAsFixed(6)} • ±${current!.accuracy.toStringAsFixed(0)} m',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      otherActive && other != null
+                          ? 'Other participant live GPS: ${other.latitude.toStringAsFixed(6)}, ${other.longitude.toStringAsFixed(6)}'
+                          : 'Waiting for the other participant to open Share Live Location and grant GPS permission. The map will not use a fake/static marker.',
+                    ),
+                    if (locationError != null)
+                      Text(
+                        locationError!,
+                        style: const TextStyle(color: AppColors.danger),
                       ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Text(
-              current == null
-                  ? 'Waiting for GPS location...'
-                  : 'Live location active • Accuracy ${current!.accuracy.toStringAsFixed(0)} m',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -6544,96 +6987,193 @@ class DonorTrackingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final patient = LatLng(
-      patientLatitude ?? 13.0827,
-      patientLongitude ?? 80.2707,
-    );
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Track Donor')),
+      appBar: AppBar(title: const Text('Live Patient & Donor Tracking')),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
-            .collection('live_locations')
-            .doc(donorId)
+            .collection('blood_requests')
+            .doc(requestId)
             .snapshots(),
-        builder: (context, snapshot) {
-          final data = snapshot.data?.data();
-          final active = data?['active'] == true;
-          final lat = (data?['latitude'] as num?)?.toDouble();
-          final lon = (data?['longitude'] as num?)?.toDouble();
-          final donor = lat == null || lon == null ? null : LatLng(lat, lon);
-
-          return Column(
-            children: [
-              Expanded(
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: donor ?? patient,
-                    initialZoom: donor != null ? 13 : 14,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.lifelink',
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: patient,
-                          width: 60,
-                          height: 60,
-                          child: const Icon(
-                            Icons.location_pin,
-                            color: AppColors.primary,
-                            size: 44,
-                          ),
+        builder: (context, requestSnapshot) {
+          final request = requestSnapshot.data?.data();
+          final patientId = (request?['patientId'] ?? request?['createdBy'])
+              ?.toString();
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('blood_requests')
+                .doc(requestId)
+                .collection('live_locations')
+                .doc(donorId)
+                .snapshots(),
+            builder: (context, donorSnapshot) {
+              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: patientId == null
+                    ? null
+                    : FirebaseFirestore.instance
+                          .collection('blood_requests')
+                          .doc(requestId)
+                          .collection('live_locations')
+                          .doc(patientId)
+                          .snapshots(),
+                builder: (context, patientSnapshot) {
+                  final donorData = donorSnapshot.data?.data();
+                  final patientData = patientSnapshot.data?.data();
+                  final donorActive =
+                      donorData?['active'] == true &&
+                      donorData?['requestId']?.toString() == requestId;
+                  final patientActive =
+                      patientData?['active'] == true &&
+                      patientData?['requestId']?.toString() == requestId;
+                  final dlat = donorActive
+                      ? (donorData?['latitude'] as num?)?.toDouble()
+                      : null;
+                  final dlon = donorActive
+                      ? (donorData?['longitude'] as num?)?.toDouble()
+                      : null;
+                  final plat = patientActive
+                      ? (patientData?['latitude'] as num?)?.toDouble()
+                      : null;
+                  final plon = patientActive
+                      ? (patientData?['longitude'] as num?)?.toDouble()
+                      : null;
+                  final donor = dlat == null || dlon == null
+                      ? null
+                      : LatLng(dlat, dlon);
+                  final patient = plat == null || plon == null
+                      ? null
+                      : LatLng(plat, plon);
+                  final requestLat = (request?['patientLatitude'] as num?)
+                      ?.toDouble();
+                  final requestLon = (request?['patientLongitude'] as num?)
+                      ?.toDouble();
+                  final hospital = requestLat == null || requestLon == null
+                      ? null
+                      : LatLng(requestLat, requestLon);
+                  final center =
+                      donor ??
+                      patient ??
+                      hospital ??
+                      const LatLng(13.0827, 80.2707);
+                  final markers = <Marker>[
+                    if (hospital != null)
+                      Marker(
+                        point: hospital,
+                        width: 70,
+                        height: 70,
+                        child: const Icon(
+                          Icons.local_hospital,
+                          color: Colors.deepOrange,
+                          size: 46,
                         ),
-                        if (donor != null)
-                          Marker(
-                            point: donor,
-                            width: 60,
-                            height: 60,
-                            child: const Icon(
-                              Icons.person_pin_circle,
-                              color: Colors.blue,
-                              size: 44,
+                      ),
+                    if (patient != null)
+                      Marker(
+                        point: patient,
+                        width: 70,
+                        height: 70,
+                        child: const Icon(
+                          Icons.person_pin_circle,
+                          color: AppColors.primary,
+                          size: 48,
+                        ),
+                      ),
+                    if (donor != null)
+                      Marker(
+                        point: donor,
+                        width: 70,
+                        height: 70,
+                        child: const Icon(
+                          Icons.my_location,
+                          color: Colors.blue,
+                          size: 44,
+                        ),
+                      ),
+                  ];
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: center,
+                            initialZoom: 13,
+                            keepAlive: true,
+                            backgroundColor: const Color(0xFFE8EEF2),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.lifelink.ai',
+                              maxZoom: 19,
+                              errorTileCallback: (tile, error, stackTrace) {
+                                debugPrint('OpenStreetMap tile error: $error');
+                              },
                             ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                child: Text(
-                  active
-                      ? 'Donor is currently sharing live location.'
-                      : 'Waiting for donor to start live location.',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const NearbyDonorsPage(role: 'Patient'),
+                            MarkerLayer(markers: markers),
+                            RichAttributionWidget(
+                              attributions: [
+                                TextSourceAttribution(
+                                  '© OpenStreetMap contributors',
+                                  onTap: () => launchUrl(
+                                    Uri.parse(
+                                      'https://www.openstreetmap.org/copyright',
+                                    ),
+                                    mode: LaunchMode.externalApplication,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.people_outline),
-                    label: const Text('Find Another Priority Donor'),
-                  ),
-                ),
-              ),
-            ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              donor == null
+                                  ? 'Donor: waiting for live GPS sharing'
+                                  : 'Donor GPS: ${donor.latitude.toStringAsFixed(6)}, ${donor.longitude.toStringAsFixed(6)}',
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              patient == null
+                                  ? 'Patient: waiting for live GPS sharing'
+                                  : 'Patient GPS: ${patient.latitude.toStringAsFixed(6)}, ${patient.longitude.toStringAsFixed(6)}',
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Orange = saved hospital location; blue = donor live GPS; red = patient live GPS. The hospital pin is the saved hospital coordinate, not a live GPS marker. Both participants must grant location permission to share live GPS.',
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DonorLiveLocationPage(
+                                        requestId: requestId,
+                                        patientLatitude: patient?.latitude ?? 0,
+                                        patientLongitude:
+                                            patient?.longitude ?? 0,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.my_location),
+                                label: const Text('Share My Live Location'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
           );
         },
       ),
@@ -6855,30 +7395,40 @@ class _HospitalPageState extends State<HospitalPage> {
     setState(() => savingRequest = true);
     try {
       final hospitalProfile = await getRoleProfile('Hospital');
-      double? requestLat = (hospitalProfile['latitude'] as num?)?.toDouble();
-      double? requestLon = (hospitalProfile['longitude'] as num?)?.toDouble();
+      // Prefer the coordinates for the selected hospital name. Older app
+      // versions may have mistakenly stored the phone GPS in the hospital
+      // profile, so blindly trusting those values can put the hospital pin
+      // at the user's current location.
+      final knownHospital = coordinatesForHospital(hospitalController.text);
+      double? requestLat =
+          knownHospital?.latitude ??
+          (hospitalProfile['latitude'] as num?)?.toDouble();
+      double? requestLon =
+          knownHospital?.longitude ??
+          (hospitalProfile['longitude'] as num?)?.toDouble();
 
       if (requestLat == null || requestLon == null) {
-        final position = await getDeviceLocation();
-        if (position == null) {
+        if (knownHospital != null) {
+          requestLat = knownHospital.latitude;
+          requestLon = knownHospital.longitude;
+          await updateRoleProfileFields('Hospital', {
+            'latitude': requestLat,
+            'longitude': requestLon,
+            'locationUpdatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                  'Please enable location so donors can navigate to the exact hospital place.',
+                  'Exact hospital coordinates are missing. Please set the hospital latitude and longitude in the Hospital profile before creating this request. Device GPS will not be used as the hospital location.',
                 ),
+                duration: Duration(seconds: 5),
               ),
             );
           }
           return;
         }
-        requestLat = position.latitude;
-        requestLon = position.longitude;
-        await updateRoleProfileFields('Hospital', {
-          'latitude': requestLat,
-          'longitude': requestLon,
-          'locationUpdatedAt': FieldValue.serverTimestamp(),
-        });
       }
 
       final ref = await FirebaseFirestore.instance
